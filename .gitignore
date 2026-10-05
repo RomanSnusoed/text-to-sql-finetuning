@@ -1,0 +1,35 @@
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Secrets
+.env
+*.key
+
+# IDE
+.vscode/
+.idea/
+
+# Large generated model files
+models/
+
+# Downloaded / generated datasets
+data/processed/
+data/spider/
+
+# Hugging Face / caches
+.cache/
+huggingface/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
