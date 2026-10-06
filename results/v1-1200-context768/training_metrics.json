@@ -1,0 +1,8 @@
+{
+  "train_loss": 0.1643,
+  "validation_loss": 0.1706322431564331,
+  "validation_token_accuracy": 0.9507039379911358,
+  "training_time_seconds": 1495,
+  "trainable_parameters": 18464768,
+  "trainable_parameter_percent": 1.182
+}

@@ -1,0 +1,5 @@
+experiment_id,model,train_size,val_size,test_size,max_length,epochs,learning_rate,lora_r,lora_alpha,execution_accuracy,execution_errors,status
+base,Qwen2.5-Coder-1.5B-Instruct,0,0,250,,,0,0,0,46.4,101,completed
+v1-1200-context768,Qwen2.5-Coder-1.5B-Instruct,1200,150,250,768,2,0.0002,16,32,59.6,59,completed
+v2-full-context768,Qwen2.5-Coder-1.5B-Instruct,6500,500,250,768,2,0.0002,16,32,,,planned
+v3-full-context1024,Qwen2.5-Coder-1.5B-Instruct,6500,500,250,1024,2,0.0002,16,32,,,planned

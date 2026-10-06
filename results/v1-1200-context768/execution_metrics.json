@@ -1,0 +1,12 @@
+{
+  "evaluated_examples": 250,
+  "base_execution_accuracy": 0.464,
+  "finetuned_execution_accuracy": 0.596,
+  "absolute_improvement_percentage_points": 13.2,
+  "relative_improvement_percent": 28.4,
+  "base_correct": 116,
+  "finetuned_correct": 149,
+  "base_execution_errors": 101,
+  "finetuned_execution_errors": 59,
+  "execution_error_reduction_percent": 41.6
+}
