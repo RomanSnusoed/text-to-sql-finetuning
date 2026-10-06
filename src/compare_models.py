@@ -1,5 +1,4 @@
 import argparse
-import gc
 import json
 from pathlib import Path
 
@@ -16,14 +15,42 @@ from transformers import (
 
 
 MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
-ADAPTER_PATH = "models/text-to-sql-qwen-lora"
-TEST_FILE = "data/processed/test.jsonl"
-RESULTS_FILE = Path("results/model_comparison.jsonl")
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=50)
+    parser = argparse.ArgumentParser(
+        description="Compare base and fine-tuned Text-to-SQL models."
+    )
+
+    parser.add_argument(
+        "--experiment-id",
+        required=True,
+    )
+
+    parser.add_argument(
+        "--adapter-path",
+        type=Path,
+        required=True,
+    )
+
+    parser.add_argument(
+        "--test-file",
+        type=str,
+        required=True,
+    )
+
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+    )
+
+    parser.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=256,
+    )
+
     return parser.parse_args()
 
 
@@ -49,14 +76,26 @@ def clean_sql(text):
 
 def canonical_sql(sql):
     try:
-        parsed = sqlglot.parse_one(sql, read="sqlite")
-        return parsed.sql(dialect="sqlite")
+        parsed = sqlglot.parse_one(
+            sql,
+            read="sqlite",
+        )
+
+        return parsed.sql(
+            dialect="sqlite"
+        )
+
     except Exception:
         return None
 
 
 @torch.inference_mode()
-def generate(model, tokenizer, prompt):
+def generate(
+    model,
+    tokenizer,
+    prompt,
+    max_new_tokens,
+):
     inputs = tokenizer(
         prompt,
         return_tensors="pt",
@@ -64,12 +103,15 @@ def generate(model, tokenizer, prompt):
 
     output = model.generate(
         **inputs,
-        max_new_tokens=256,
+        max_new_tokens=max_new_tokens,
         do_sample=False,
         pad_token_id=tokenizer.eos_token_id,
     )
 
-    generated = output[0][inputs["input_ids"].shape[1]:]
+    generated = output[
+        0,
+        inputs["input_ids"].shape[1]:,
+    ]
 
     return clean_sql(
         tokenizer.decode(
@@ -84,8 +126,13 @@ def evaluate_outputs(rows, field):
     canonical_matches = 0
 
     for row in rows:
-        predicted = canonical_sql(row[field])
-        reference = canonical_sql(row["reference_sql"])
+        predicted = canonical_sql(
+            row[field]
+        )
+
+        reference = canonical_sql(
+            row["reference_sql"]
+        )
 
         if predicted is not None:
             valid += 1
@@ -103,94 +150,166 @@ def evaluate_outputs(rows, field):
         "valid_sql": valid,
         "valid_sql_pct": 100 * valid / total,
         "canonical_exact": canonical_matches,
-        "canonical_exact_pct": 100 * canonical_matches / total,
+        "canonical_exact_pct": (
+            100 * canonical_matches / total
+        ),
     }
+
+
+def save_json(path, data):
+    with path.open(
+        "w",
+        encoding="utf-8",
+    ) as file:
+        json.dump(
+            data,
+            file,
+            indent=2,
+            ensure_ascii=False,
+        )
 
 
 def main():
     args = parse_args()
 
-    RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    results_dir = (
+        Path("results")
+        / args.experiment_id
+    )
+
+    results_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    predictions_file = (
+        results_dir
+        / "predictions.jsonl"
+    )
+
+    metrics_file = (
+        results_dir
+        / "generation_metrics.json"
+    )
 
     dataset = load_dataset(
         "json",
-        data_files=TEST_FILE,
+        data_files=args.test_file,
         split="train",
     )
 
-    dataset = dataset.select(
-        range(min(args.limit, len(dataset)))
-    )
+    if args.limit is not None:
+        dataset = dataset.select(
+            range(
+                min(
+                    args.limit,
+                    len(dataset),
+                )
+            )
+        )
 
     print("=" * 80)
     print("BASE vs FINE-TUNED TEXT-TO-SQL")
     print("=" * 80)
-    print("Examples:", len(dataset))
 
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    print("Experiment:", args.experiment_id)
+    print("Examples:", len(dataset))
+    print("Adapter:", args.adapter_path)
+    print("Test file:", args.test_file)
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        MODEL_NAME
+    )
 
     if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token = (
+            tokenizer.eos_token
+        )
 
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=True,
+    quantization_config = (
+        BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=(
+                torch.bfloat16
+            ),
+            bnb_4bit_use_double_quant=True,
+        )
     )
 
     print("\nLoading base model...")
 
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME,
-        quantization_config=quantization_config,
-        device_map="auto",
-        dtype=torch.bfloat16,
+    model = (
+        AutoModelForCausalLM
+        .from_pretrained(
+            MODEL_NAME,
+            quantization_config=(
+                quantization_config
+            ),
+            device_map="auto",
+            dtype=torch.bfloat16,
+        )
     )
 
     model.eval()
 
     results = []
 
-    print("\nGenerating BASE predictions...")
+    print(
+        "\nGenerating BASE predictions..."
+    )
 
     for example in tqdm(dataset):
         prediction = generate(
             model,
             tokenizer,
             example["prompt"],
+            args.max_new_tokens,
         )
 
         results.append(
             {
                 "db_id": example["db_id"],
-                "question": example["question"],
-                "reference_sql": example["completion"],
+                "question": (
+                    example["question"]
+                ),
+                "reference_sql": (
+                    example["completion"]
+                ),
                 "base_sql": prediction,
             }
         )
 
-    print("\nAttaching trained LoRA adapter...")
+    print(
+        "\nAttaching trained LoRA adapter..."
+    )
 
     model = PeftModel.from_pretrained(
         model,
-        ADAPTER_PATH,
+        str(args.adapter_path),
     )
 
     model.eval()
 
-    print("\nGenerating FINE-TUNED predictions...")
+    print(
+        "\nGenerating FINE-TUNED predictions..."
+    )
 
-    for index, example in enumerate(tqdm(dataset)):
+    for index, example in enumerate(
+        tqdm(dataset)
+    ):
         prediction = generate(
             model,
             tokenizer,
             example["prompt"],
+            args.max_new_tokens,
         )
 
-        results[index]["finetuned_sql"] = prediction
+        results[index][
+            "finetuned_sql"
+        ] = prediction
 
-    with RESULTS_FILE.open(
+    with predictions_file.open(
         "w",
         encoding="utf-8",
     ) as file:
@@ -213,11 +332,35 @@ def main():
         "finetuned_sql",
     )
 
+    generation_metrics = {
+        "experiment_id": (
+            args.experiment_id
+        ),
+        "evaluated_examples": (
+            len(results)
+        ),
+        "max_new_tokens": (
+            args.max_new_tokens
+        ),
+        "base": base_metrics,
+        "finetuned": tuned_metrics,
+    }
+
+    save_json(
+        metrics_file,
+        generation_metrics,
+    )
+
     print("\n" + "=" * 80)
-    print("RESULTS")
+    print("GENERATION RESULTS")
     print("=" * 80)
 
-    print(f"\n{'Metric':<30}{'Base':>12}{'Fine-tuned':>15}")
+    print(
+        f"\n{'Metric':<30}"
+        f"{'Base':>12}"
+        f"{'Fine-tuned':>15}"
+    )
+
     print("-" * 57)
 
     print(
@@ -232,26 +375,15 @@ def main():
         f"{tuned_metrics['canonical_exact_pct']:>14.1f}%"
     )
 
-    print("\nExamples:")
-    print("=" * 80)
+    print(
+        "\nPredictions saved to:"
+    )
+    print(predictions_file)
 
-    for row in results[:5]:
-        print("\nQUESTION:")
-        print(row["question"])
-
-        print("\nREFERENCE:")
-        print(row["reference_sql"])
-
-        print("\nBASE:")
-        print(row["base_sql"])
-
-        print("\nFINE-TUNED:")
-        print(row["finetuned_sql"])
-
-        print("-" * 80)
-
-    print("\nDetailed results saved to:")
-    print(RESULTS_FILE)
+    print(
+        "\nGeneration metrics saved to:"
+    )
+    print(metrics_file)
 
 
 if __name__ == "__main__":
