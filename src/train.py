@@ -1,4 +1,5 @@
 import argparse
+import json
 from pathlib import Path
 
 import torch
@@ -10,22 +11,113 @@ from trl import SFTConfig, SFTTrainer
 
 MODEL_NAME = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
 
-TRAIN_FILE = "data/processed/train.jsonl"
-VAL_FILE = "data/processed/validation.jsonl"
-
-OUTPUT_DIR = Path("models/text-to-sql-qwen-lora")
-
 
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="QLoRA fine-tuning for Text-to-SQL experiments."
+    )
+
+    parser.add_argument(
+        "--experiment-id",
+        type=str,
+        default="v2-full-context768",
+    )
+
+    parser.add_argument(
+        "--train-file",
+        type=str,
+        default="data/v2-full/train.jsonl",
+    )
+
+    parser.add_argument(
+        "--val-file",
+        type=str,
+        default="data/v2-full/validation.jsonl",
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("models/v2-full-context768"),
+    )
+
+    parser.add_argument(
+        "--max-length",
+        type=int,
+        default=768,
+    )
+
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=2,
+    )
+
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=2e-4,
+    )
+
+    parser.add_argument(
+        "--lora-r",
+        type=int,
+        default=16,
+    )
+
+    parser.add_argument(
+        "--lora-alpha",
+        type=int,
+        default=32,
+    )
+
+    parser.add_argument(
+        "--lora-dropout",
+        type=float,
+        default=0.05,
+    )
+
+    parser.add_argument(
+        "--gradient-accumulation-steps",
+        type=int,
+        default=8,
+    )
+
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+    )
 
     parser.add_argument(
         "--smoke",
         action="store_true",
-        help="Run a tiny training job first to verify the pipeline.",
+        help="Run a tiny 5-step training job.",
     )
 
     return parser.parse_args()
+
+
+def save_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(
+            data,
+            file,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+
+def make_json_safe(value):
+    if isinstance(value, (int, float, str, bool)) or value is None:
+        return value
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def main():
@@ -35,18 +127,33 @@ def main():
     print("TEXT-TO-SQL QLoRA TRAINING")
     print("=" * 80)
 
+    print("Experiment:", args.experiment_id)
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA GPU is required for this training configuration.")
+
     print("GPU:", torch.cuda.get_device_name(0))
-    print(
-        "VRAM:",
-        round(
-            torch.cuda.get_device_properties(0).total_memory / 1024**3,
-            2,
-        ),
-        "GB",
+
+    vram_gb = (
+        torch.cuda.get_device_properties(0).total_memory
+        / 1024**3
     )
 
+    print("VRAM:", round(vram_gb, 2), "GB")
+
     # ------------------------------------------------------------------
-    # 1. DATASET
+    # 1. PATHS
+    # ------------------------------------------------------------------
+
+    if args.smoke:
+        model_output_dir = Path("models/smoke-test-v2")
+    else:
+        model_output_dir = args.output_dir
+
+    results_dir = Path("results") / args.experiment_id
+
+    # ------------------------------------------------------------------
+    # 2. DATASET
     # ------------------------------------------------------------------
 
     print("\nLoading datasets...")
@@ -54,16 +161,20 @@ def main():
     dataset = load_dataset(
         "json",
         data_files={
-            "train": TRAIN_FILE,
-            "validation": VAL_FILE,
+            "train": args.train_file,
+            "validation": args.val_file,
         },
     )
 
     train_dataset = dataset["train"]
     eval_dataset = dataset["validation"]
 
+    full_train_size = len(train_dataset)
+    full_val_size = len(eval_dataset)
+
     if args.smoke:
         print("\nSMOKE TEST MODE")
+
         train_dataset = train_dataset.select(
             range(min(64, len(train_dataset)))
         )
@@ -76,18 +187,20 @@ def main():
     print("Validation examples:", len(eval_dataset))
 
     # ------------------------------------------------------------------
-    # 2. TOKENIZER
+    # 3. TOKENIZER
     # ------------------------------------------------------------------
 
     print("\nLoading tokenizer...")
 
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(
+        MODEL_NAME
+    )
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
     # ------------------------------------------------------------------
-    # 3. 4-BIT QUANTIZATION
+    # 4. QUANTIZATION
     # ------------------------------------------------------------------
 
     print("\nPreparing 4-bit NF4 quantization...")
@@ -100,70 +213,58 @@ def main():
     )
 
     # ------------------------------------------------------------------
-    # 4. LoRA
+    # 5. LORA
     # ------------------------------------------------------------------
 
     print("Preparing LoRA configuration...")
 
     peft_config = LoraConfig(
-        r=16,
-        lora_alpha=32,
-        lora_dropout=0.05,
+        r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
         bias="none",
         task_type="CAUSAL_LM",
-
-        # QLoRA-style: adapt all linear transformer layers.
         target_modules="all-linear",
     )
 
     # ------------------------------------------------------------------
-    # 5. TRAINING CONFIG
+    # 6. TRAINING CONFIG
     # ------------------------------------------------------------------
 
     if args.smoke:
         epochs = 1
         max_steps = 5
-        output_dir = "models/smoke-test"
+        warmup_steps = 1
     else:
-        epochs = 2
+        epochs = args.epochs
         max_steps = -1
-        output_dir = str(OUTPUT_DIR)
+        warmup_steps = 15
 
     training_config = SFTConfig(
-        output_dir=output_dir,
+        output_dir=str(model_output_dir),
 
-        # ----------------------------
-        # Training
-        # ----------------------------
         num_train_epochs=epochs,
         max_steps=max_steps,
 
         per_device_train_batch_size=1,
         per_device_eval_batch_size=1,
 
-        gradient_accumulation_steps=8,
+        gradient_accumulation_steps=(
+            args.gradient_accumulation_steps
+        ),
 
-        learning_rate=2e-4,
+        learning_rate=args.learning_rate,
+        warmup_steps=warmup_steps,
 
-        warmup_steps=1 if args.smoke else 15,
-
-        # ----------------------------
-        # Memory
-        # ----------------------------
         bf16=True,
         fp16=False,
 
         gradient_checkpointing=True,
 
-        max_length=768,
+        max_length=args.max_length,
 
-        # Our dataset has:
-        # prompt + completion
         completion_only_loss=True,
 
-        # ----------------------------
-        # Logging / evaluation
-        # ----------------------------
         logging_steps=5,
 
         eval_strategy="epoch",
@@ -175,24 +276,21 @@ def main():
         metric_for_best_model="eval_loss",
         greater_is_better=False,
 
-        # No external tracking service needed.
         report_to="none",
 
-        # Qwen2.5 chat EOS token.
         eos_token="<|im_end|>",
 
-        seed=42,
+        seed=args.seed,
     )
 
     # ------------------------------------------------------------------
-    # 6. TRAINER
+    # 7. TRAINER
     # ------------------------------------------------------------------
 
     print("\nCreating SFTTrainer...")
 
     trainer = SFTTrainer(
         model=MODEL_NAME,
-
         args=training_config,
 
         train_dataset=train_dataset,
@@ -204,12 +302,79 @@ def main():
         peft_config=peft_config,
     )
 
-    print("\nTrainable parameters:")
+    trainable_params = sum(
+        parameter.numel()
+        for parameter in trainer.model.parameters()
+        if parameter.requires_grad
+    )
 
+    total_params = sum(
+        parameter.numel()
+        for parameter in trainer.model.parameters()
+    )
+
+    trainable_percent = (
+        100 * trainable_params / total_params
+    )
+
+    print("\nTrainable parameters:")
     trainer.model.print_trainable_parameters()
 
     # ------------------------------------------------------------------
-    # 7. TRAIN
+    # 8. EXPERIMENT CONFIG
+    # ------------------------------------------------------------------
+
+    if not args.smoke:
+        experiment_config = {
+            "experiment_id": args.experiment_id,
+            "model": MODEL_NAME,
+            "method": "4-bit QLoRA SFT",
+            "dataset": "Spider",
+
+            "train_file": args.train_file,
+            "validation_file": args.val_file,
+
+            "training_examples": full_train_size,
+            "validation_examples": full_val_size,
+
+            "max_length": args.max_length,
+            "epochs": args.epochs,
+
+            "batch_size": 1,
+            "gradient_accumulation_steps": (
+                args.gradient_accumulation_steps
+            ),
+
+            "learning_rate": args.learning_rate,
+
+            "lora_r": args.lora_r,
+            "lora_alpha": args.lora_alpha,
+            "lora_dropout": args.lora_dropout,
+
+            "quantization": "4-bit NF4",
+            "compute_dtype": "bfloat16",
+
+            "gradient_checkpointing": True,
+
+            "seed": args.seed,
+
+            "model_output_dir": str(
+                model_output_dir
+            ),
+        }
+
+        save_json(
+            results_dir / "config.json",
+            experiment_config,
+        )
+
+        print(
+            "\nExperiment config saved to:",
+            results_dir / "config.json",
+        )
+
+    # ------------------------------------------------------------------
+    # 9. TRAIN
     # ------------------------------------------------------------------
 
     print("\nStarting training...\n")
@@ -219,7 +384,7 @@ def main():
     print("\nTraining finished.")
 
     # ------------------------------------------------------------------
-    # 8. FINAL EVALUATION
+    # 10. FINAL EVALUATION
     # ------------------------------------------------------------------
 
     print("\nEvaluating validation loss...")
@@ -232,17 +397,50 @@ def main():
         print(f"{key}: {value}")
 
     # ------------------------------------------------------------------
-    # 9. SAVE LoRA ADAPTER
+    # 11. SAVE MODEL + METRICS
     # ------------------------------------------------------------------
 
     if not args.smoke:
         print("\nSaving LoRA adapter...")
 
-        trainer.save_model(str(OUTPUT_DIR))
-        tokenizer.save_pretrained(str(OUTPUT_DIR))
+        trainer.save_model(
+            str(model_output_dir)
+        )
 
-        print("\nSaved to:")
-        print(OUTPUT_DIR)
+        tokenizer.save_pretrained(
+            str(model_output_dir)
+        )
+
+        training_metrics = {
+            "trainable_parameters": trainable_params,
+            "total_parameters": total_params,
+            "trainable_parameter_percent": (
+                trainable_percent
+            ),
+        }
+
+        for key, value in train_result.metrics.items():
+            training_metrics[key] = (
+                make_json_safe(value)
+            )
+
+        for key, value in eval_results.items():
+            training_metrics[key] = (
+                make_json_safe(value)
+            )
+
+        save_json(
+            results_dir / "training_metrics.json",
+            training_metrics,
+        )
+
+        print(
+            "\nTraining metrics saved to:",
+            results_dir / "training_metrics.json",
+        )
+
+        print("\nModel saved to:")
+        print(model_output_dir)
 
     print("\nDone.")
 

@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 
 from datasets import Dataset, load_dataset
@@ -5,13 +6,37 @@ from datasets import Dataset, load_dataset
 
 SEED = 42
 
-# На первом проходе намеренно используем subset.
-# Когда pipeline заработает, размер можно увеличить.
-TRAIN_SIZE = 1200
-VAL_SIZE = 150
-TEST_SIZE = 250
 
-OUTPUT_DIR = Path("data/processed")
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Prepare Spider Text-to-SQL datasets."
+    )
+
+    parser.add_argument(
+        "--train-size",
+        type=int,
+        default=6500,
+    )
+
+    parser.add_argument(
+        "--val-size",
+        type=int,
+        default=500,
+    )
+
+    parser.add_argument(
+        "--test-size",
+        type=int,
+        default=250,
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("data/v2-full"),
+    )
+
+    return parser.parse_args()
 
 
 def load_schema_map():
@@ -21,8 +46,6 @@ def load_schema_map():
         split="train",
     )
 
-    # Dataset currently calls the schema field something like
-    # "Schema (values (type))". Find it defensively.
     schema_column = next(
         column
         for column in schemas.column_names
@@ -76,7 +99,10 @@ def convert_split(split, schema_map):
 
 
 def main():
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    args = parse_args()
+
+    output_dir = args.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     print("Loading Spider...")
     spider = load_dataset("xlangai/spider")
@@ -88,18 +114,34 @@ def main():
     print(f"Original train examples: {len(spider['train'])}")
     print(f"Original validation examples: {len(spider['validation'])}")
 
-    # Shuffle only the original training split.
     shuffled_train = spider["train"].shuffle(seed=SEED)
 
-    train_raw = shuffled_train.select(range(TRAIN_SIZE))
+    requested_total = args.train_size + args.val_size
 
-    val_raw = shuffled_train.select(
-        range(TRAIN_SIZE, TRAIN_SIZE + VAL_SIZE)
+    if requested_total > len(shuffled_train):
+        raise ValueError(
+            f"Requested {requested_total} train+validation examples, "
+            f"but Spider train contains only {len(shuffled_train)}."
+        )
+
+    train_raw = shuffled_train.select(
+        range(args.train_size)
     )
 
-    # Spider's official held-out validation databases become our test set.
+    val_raw = shuffled_train.select(
+        range(
+            args.train_size,
+            args.train_size + args.val_size,
+        )
+    )
+
     test_raw = spider["validation"].select(
-        range(min(TEST_SIZE, len(spider["validation"])))
+        range(
+            min(
+                args.test_size,
+                len(spider["validation"]),
+            )
+        )
     )
 
     train = convert_split(train_raw, schema_map)
@@ -107,19 +149,19 @@ def main():
     test = convert_split(test_raw, schema_map)
 
     train.to_json(
-        OUTPUT_DIR / "train.jsonl",
+        output_dir / "train.jsonl",
         orient="records",
         lines=True,
     )
 
     validation.to_json(
-        OUTPUT_DIR / "validation.jsonl",
+        output_dir / "validation.jsonl",
         orient="records",
         lines=True,
     )
 
     test.to_json(
-        OUTPUT_DIR / "test.jsonl",
+        output_dir / "test.jsonl",
         orient="records",
         lines=True,
     )
