@@ -19,8 +19,7 @@ __pycache__/
 models/
 
 # Downloaded / generated datasets
-data/processed/
-data/spider/
+data/
 
 # Hugging Face / caches
 .cache/

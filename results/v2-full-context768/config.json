@@ -1,0 +1,23 @@
+{
+  "experiment_id": "v2-full-context768",
+  "model": "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+  "method": "4-bit QLoRA SFT",
+  "dataset": "Spider",
+  "train_file": "data\\v2-full\\train.jsonl",
+  "validation_file": "data\\v2-full\\validation.jsonl",
+  "training_examples": 6500,
+  "validation_examples": 500,
+  "max_length": 768,
+  "epochs": 2,
+  "batch_size": 1,
+  "gradient_accumulation_steps": 8,
+  "learning_rate": 0.0002,
+  "lora_r": 16,
+  "lora_alpha": 32,
+  "lora_dropout": 0.05,
+  "quantization": "4-bit NF4",
+  "compute_dtype": "bfloat16",
+  "gradient_checkpointing": true,
+  "seed": 42,
+  "model_output_dir": "models\\v2-full-context768"
+}

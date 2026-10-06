@@ -1,0 +1,17 @@
+{
+  "experiment_id": "v2-full-context768",
+  "evaluated_examples": 250,
+  "max_new_tokens": 256,
+  "base": {
+    "valid_sql": 237,
+    "valid_sql_pct": 94.8,
+    "canonical_exact": 9,
+    "canonical_exact_pct": 3.6
+  },
+  "finetuned": {
+    "valid_sql": 250,
+    "valid_sql_pct": 100.0,
+    "canonical_exact": 30,
+    "canonical_exact_pct": 12.0
+  }
+}
