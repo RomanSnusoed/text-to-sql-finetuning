@@ -1,0 +1,14 @@
+{
+  "experiment_id": "v3-full-context1024",
+  "evaluated_examples": 250,
+  "reference_errors": 0,
+  "base_execution_accuracy": 0.46399999999999997,
+  "finetuned_execution_accuracy": 0.664,
+  "absolute_improvement_percentage_points": 20.000000000000007,
+  "relative_improvement_percent": 43.103448275862085,
+  "base_correct": 116,
+  "finetuned_correct": 166,
+  "base_execution_errors": 101,
+  "finetuned_execution_errors": 44,
+  "execution_error_reduction_percent": 56.43564356435643
+}
