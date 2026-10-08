@@ -6,24 +6,36 @@ The project compares the original **Qwen2.5-Coder-1.5B-Instruct** model against 
 
 ## Results
 
-Fine-tuning produced a clear improvement in actual SQL execution performance.
+The project uses a sequence of controlled experiments to measure how individual changes affect Text-to-SQL performance.
 
-| Metric                 | Base Model |          Fine-Tuned |             Change |
-| ---------------------- | ---------: | ------------------: | -----------------: |
-| Execution Accuracy     |      46.4% |     **59.6%** | **+13.2 pp** |
-| Correct Executions     |  116 / 250 | **149 / 250** |      **+33** |
-| Execution Errors       |        101 |        **59** |   **-41.6%** |
-| Canonical Exact Match* |      14.0% |     **34.0%** | **+20.0 pp** |
+| Experiment                 | Training Examples | Context | Execution Accuracy |             Correct | Execution Errors |
+| -------------------------- | ----------------: | ------: | -----------------: | ------------------: | ---------------: |
+| Base Qwen2.5-Coder-1.5B    |                — |      — |              46.4% |           116 / 250 |              101 |
+| v1 — QLoRA baseline       |             1,200 |     768 |              59.6% |           149 / 250 |               59 |
+| v2 — Full Spider training |             6,500 |     768 |    **64.0%** | **160 / 250** |     **36** |
 
-* Canonical exact match was measured during the initial 50-query evaluation.
+### Current best result
 
-The final execution benchmark was performed on **250 held-out Spider queries** using the corresponding SQLite databases.
+Training the same QLoRA configuration on 6,500 Spider examples improved execution accuracy from:
 
-This represents a **28.4% relative improvement in execution accuracy** compared with the original model.
+```text
+Base model: 46.4%
+v1 QLoRA:   59.6%
+v2 QLoRA:   64.0%
+```
 
-> Note: this project uses a custom held-out Spider subset and custom execution evaluator. The results should not be interpreted as directly comparable to the official Spider leaderboard.
+Compared with the original base model, v2 achieved:
 
----
+- **+17.6 percentage points** execution accuracy
+- **+37.9% relative improvement**
+- **+44 additional correct queries**
+- execution errors reduced from **101 to 36**
+
+Compared with v1, increasing the training set from 1,200 to 6,500 examples improved execution accuracy by **+4.4 percentage points**.
+
+The final benchmark contains **250 held-out Spider queries** executed against the corresponding SQLite databases.
+
+> Note: this project uses a custom held-out Spider subset and custom execution evaluator. Results are not directly comparable to the official Spider leaderboard.
 
 ## Example
 
@@ -740,3 +752,73 @@ while reducing SQL execution errors by approximately:
 ```
 
 The next stage is focused on full-dataset training, stronger schema grounding, and execution-guided error correction.
+
+## Results
+
+The project uses a sequence of controlled experiments to measure how individual changes affect Text-to-SQL performance.
+
+| Experiment                 | Training Examples | Context | Execution Accuracy |             Correct | Execution Errors |
+| -------------------------- | ----------------: | ------: | -----------------: | ------------------: | ---------------: |
+| Base Qwen2.5-Coder-1.5B    |                — |      — |              46.4% |           116 / 250 |              101 |
+| v1 — QLoRA baseline       |             1,200 |     768 |              59.6% |           149 / 250 |               59 |
+| v2 — Full Spider training |             6,500 |     768 |    **64.0%** | **160 / 250** |     **36** |
+
+### Current best result
+
+Training the same QLoRA configuration on 6,500 Spider examples improved execution accuracy from:
+
+```text
+Base model: 46.4%
+v1 QLoRA:   59.6%
+v2 QLoRA:   64.0%
+```
+
+Compared with the original base model, v2 achieved:
+
+- **+17.6 percentage points** execution accuracy
+- **+37.9% relative improvement**
+- **+44 additional correct queries**
+- execution errors reduced from **101 to 36**
+
+Compared with v1, increasing the training set from 1,200 to 6,500 examples improved execution accuracy by **+4.4 percentage points**.
+
+The final benchmark contains **250 held-out Spider queries** executed against the corresponding SQLite databases.
+
+> Note: this project uses a custom held-out Spider subset and custom execution evaluator. Results are not directly comparable to the official Spider leaderboard.
+
+---
+
+## Results
+
+The project uses a sequence of controlled experiments to measure how individual changes affect Text-to-SQL performance.
+
+| Experiment                 | Training Examples | Context | Execution Accuracy |             Correct | Execution Errors |
+| -------------------------- | ----------------: | ------: | -----------------: | ------------------: | ---------------: |
+| Base Qwen2.5-Coder-1.5B    |                — |      — |              46.4% |           116 / 250 |              101 |
+| v1 — QLoRA baseline       |             1,200 |     768 |              59.6% |           149 / 250 |               59 |
+| v2 — Full Spider training |             6,500 |     768 |    **64.0%** | **160 / 250** |     **36** |
+
+### Current best result
+
+Training the same QLoRA configuration on 6,500 Spider examples improved execution accuracy from:
+
+```text
+Base model: 46.4%
+v1 QLoRA:   59.6%
+v2 QLoRA:   64.0%
+```
+
+Compared with the original base model, v2 achieved:
+
+- **+17.6 percentage points** execution accuracy
+- **+37.9% relative improvement**
+- **+44 additional correct queries**
+- execution errors reduced from **101 to 36**
+
+Compared with v1, increasing the training set from 1,200 to 6,500 examples improved execution accuracy by **+4.4 percentage points**.
+
+The final benchmark contains **250 held-out Spider queries** executed against the corresponding SQLite databases.
+
+> Note: this project uses a custom held-out Spider subset and custom execution evaluator. Results are not directly comparable to the official Spider leaderboard.
+
+---
