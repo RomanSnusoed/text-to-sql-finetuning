@@ -61,7 +61,7 @@ def load_schema_map():
 
 
 def format_example(example, schema_map):
-    """Convert a Spider example into prompt/completion format."""
+    """Convert a Spider example into schema-grounded prompt/completion format."""
 
     db_id = example["db_id"]
 
@@ -71,12 +71,20 @@ def format_example(example, schema_map):
     schema = schema_map[db_id]
 
     prompt = (
-        "You are a Text-to-SQL assistant.\n"
-        "Generate one valid SQL query for the given database schema "
-        "and question.\n"
-        "Return SQL only. Do not explain the answer.\n\n"
+        "You are an expert Text-to-SQL system for SQLite.\n"
+        "Convert the user's question into exactly one executable SQLite query.\n\n"
+
+        "Rules:\n"
+        "- Use ONLY tables and columns that appear in the provided database schema.\n"
+        "- Never invent table names or column names.\n"
+        "- Respect the relationships and structure shown in the schema.\n"
+        "- Use valid SQLite syntax.\n"
+        "- Return exactly one SQL query.\n"
+        "- Return SQL only: no Markdown, explanations, comments, or code fences.\n\n"
+
         f"Database schema:\n{schema}\n\n"
         f"Question:\n{example['question']}\n\n"
+
         "SQL:\n"
     )
 
@@ -87,7 +95,6 @@ def format_example(example, schema_map):
         "prompt": prompt,
         "completion": example["query"].strip(),
     }
-
 
 def convert_split(split, schema_map):
     rows = [
