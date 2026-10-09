@@ -1,0 +1,17 @@
+{
+  "experiment_id": "v5-structured-schema",
+  "evaluated_examples": 250,
+  "max_new_tokens": 256,
+  "base": {
+    "valid_sql": 232,
+    "valid_sql_pct": 92.8,
+    "canonical_exact": 6,
+    "canonical_exact_pct": 2.4
+  },
+  "finetuned": {
+    "valid_sql": 250,
+    "valid_sql_pct": 100.0,
+    "canonical_exact": 31,
+    "canonical_exact_pct": 12.4
+  }
+}
