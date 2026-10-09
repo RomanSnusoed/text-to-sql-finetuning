@@ -1,0 +1,14 @@
+{
+  "experiment_id": "v5-structured-schema",
+  "evaluated_examples": 250,
+  "reference_errors": 0,
+  "base_execution_accuracy": 0.46,
+  "finetuned_execution_accuracy": 0.628,
+  "absolute_improvement_percentage_points": 16.799999999999997,
+  "relative_improvement_percent": 36.521739130434774,
+  "base_correct": 115,
+  "finetuned_correct": 157,
+  "base_execution_errors": 91,
+  "finetuned_execution_errors": 52,
+  "execution_error_reduction_percent": 42.857142857142854
+}
