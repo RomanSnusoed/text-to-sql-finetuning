@@ -1,0 +1,17 @@
+{
+  "experiment_id": "v4-schema-aware",
+  "evaluated_examples": 250,
+  "max_new_tokens": 256,
+  "base": {
+    "valid_sql": 209,
+    "valid_sql_pct": 83.6,
+    "canonical_exact": 8,
+    "canonical_exact_pct": 3.2
+  },
+  "finetuned": {
+    "valid_sql": 250,
+    "valid_sql_pct": 100.0,
+    "canonical_exact": 27,
+    "canonical_exact_pct": 10.8
+  }
+}
