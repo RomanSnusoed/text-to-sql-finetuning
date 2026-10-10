@@ -1,0 +1,18 @@
+{
+  "trainable_parameters": 36929536,
+  "total_parameters": 925545984,
+  "trainable_parameter_percent": 3.9900271448857585,
+  "train_runtime": 7248.7644,
+  "train_samples_per_second": 1.771,
+  "train_steps_per_second": 0.222,
+  "total_flos": 2.8810315769647104e+16,
+  "train_loss": 0.09717028629751516,
+  "epoch": 2.0,
+  "eval_loss": 0.0677642822265625,
+  "eval_runtime": 72.7371,
+  "eval_samples_per_second": 6.847,
+  "eval_steps_per_second": 6.847,
+  "eval_entropy": 0.05461033737898456,
+  "eval_num_tokens": 3564036.0,
+  "eval_mean_token_accuracy": 0.9802193983970396
+}

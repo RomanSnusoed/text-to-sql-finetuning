@@ -5,3 +5,4 @@ v2-full-context768,Qwen2.5-Coder-1.5B-Instruct,6500,500,250,768,2,0.0002,16,32,6
 v3-full-context1024,Qwen2.5-Coder-1.5B-Instruct,6500,500,250,1024,2,0.0002,16,32,66.4,44,completed
 v4-schema-aware,Qwen2.5-Coder-1.5B-Instruct,6500,500,250,1024,2,0.0002,16,32,63.2,41,completed
 v5-structured-schema,Qwen2.5-Coder-1.5B-Instruct,6500,500,250,1024,2,0.0002,16,32,62.8,52,completed
+v6-lora-r32,Qwen2.5-Coder-1.5B-Instruct,6500,500,250,1024,2,0.0002,32,64,64.4,50,completed
