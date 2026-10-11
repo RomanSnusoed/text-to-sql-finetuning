@@ -1,41 +1,169 @@
+
+
 # Text-to-SQL Fine-Tuning with QLoRA
 
-Fine-tuning a code-oriented language model to translate natural-language questions and database schemas into executable SQLite queries.
+A local LLM fine-tuning project for translating natural-language questions and database schemas into executable SQL.
 
-The project compares the original **Qwen2.5-Coder-1.5B-Instruct** model against a **QLoRA fine-tuned version** on held-out Spider Text-to-SQL examples.
+The project uses **Qwen2.5-Coder**, **QLoRA**, the **Spider Text-to-SQL dataset**, SQLGlot, and SQLite execution-based evaluation.
 
-## Results
+The main goal is to measure how controlled changes to training data, context length, prompting, schema representation, LoRA configuration, and model size affect real SQL execution accuracy.
 
-The project uses a sequence of controlled experiments to measure how individual changes affect Text-to-SQL performance.
+---
 
-| Experiment                 | Training Examples | Context | Execution Accuracy |             Correct | Execution Errors |
-| -------------------------- | ----------------: | ------: | -----------------: | ------------------: | ---------------: |
-| Base Qwen2.5-Coder-1.5B    |                — |      — |              46.4% |           116 / 250 |              101 |
-| v1 — QLoRA baseline       |             1,200 |     768 |              59.6% |           149 / 250 |               59 |
-| v2 — Full Spider training |             6,500 |     768 |    **64.0%** | **160 / 250** |     **36** |
+## Best Result
 
-### Current best result
-
-Training the same QLoRA configuration on 6,500 Spider examples improved execution accuracy from:
+The strongest experiment so far is:
 
 ```text
-Base model: 46.4%
-v1 QLoRA:   59.6%
-v2 QLoRA:   64.0%
+Model:              Qwen2.5-Coder-1.5B-Instruct
+Training examples:  6,500
+Validation:           500
+Context length:      1,024
+LoRA rank:              16
+LoRA alpha:             32
+Epochs:                  2
 ```
 
-Compared with the original base model, v2 achieved:
+Execution accuracy improved from:
 
-- **+17.6 percentage points** execution accuracy
-- **+37.9% relative improvement**
-- **+44 additional correct queries**
-- execution errors reduced from **101 to 36**
+```text
+Base model:          46.4%
+Best fine-tuned:     66.4%
+```
 
-Compared with v1, increasing the training set from 1,200 to 6,500 examples improved execution accuracy by **+4.4 percentage points**.
+That corresponds to:
 
-The final benchmark contains **250 held-out Spider queries** executed against the corresponding SQLite databases.
+```text
++20.0 percentage points
++43.1% relative improvement
++50 additional correct queries
+```
 
-> Note: this project uses a custom held-out Spider subset and custom execution evaluator. Results are not directly comparable to the official Spider leaderboard.
+On the 250-query development benchmark:
+
+```text
+Base model:       116 / 250 correct
+Best fine-tuned:  166 / 250 correct
+```
+
+> This project uses a custom Spider subset and a custom SQLite execution evaluator. The results are not directly comparable to the official Spider leaderboard.
+
+---
+
+## Experiment Results
+
+| Experiment                       | Model                        |           Train |           Val |        Context | LoRA                 | Execution Accuracy |             Correct | Execution Errors |
+| -------------------------------- | ---------------------------- | --------------: | ------------: | -------------: | -------------------- | -----------------: | ------------------: | ---------------: |
+| Base                             | Qwen2.5-Coder-1.5B           |              — |            — |             — | —                   |              46.4% |           116 / 250 |              101 |
+| v1 — Baseline QLoRA             | Qwen2.5-Coder-1.5B           |           1,200 |           150 |            768 | r16 / α32           |              59.6% |           149 / 250 |               59 |
+| v2 — Full training split        | Qwen2.5-Coder-1.5B           |           6,500 |           500 |            768 | r16 / α32           |              64.0% |           160 / 250 |               36 |
+| **v3 — Context 1024**     | **Qwen2.5-Coder-1.5B** | **6,500** | **500** | **1024** | **r16 / α32** |    **66.4%** | **166 / 250** |     **44** |
+| v4 — Strict schema-aware prompt | Qwen2.5-Coder-1.5B           |           6,500 |           500 |           1024 | r16 / α32           |              63.2% |           158 / 250 |               41 |
+| v5 — Structured PK/FK schema    | Qwen2.5-Coder-1.5B           |           6,500 |           500 |           1024 | r16 / α32           |              62.8% |           157 / 250 |               52 |
+| v6 — Larger LoRA rank           | Qwen2.5-Coder-1.5B           |           6,500 |           500 |           1024 | r32 / α64           |              64.4% |           161 / 250 |               50 |
+| v7 — Qwen 3B                    | Qwen2.5-Coder-3B             |           6,500 |           500 |           1024 | r16 / α32           |              60.4% |           151 / 250 |               49 |
+
+Full experiment metadata is stored in:
+
+```text
+results/experiments.csv
+```
+
+---
+
+## Key Findings
+
+The experiments produced several useful results.
+
+### More training data helped
+
+Increasing the training set from:
+
+```text
+1,200 → 6,500 examples
+```
+
+improved execution accuracy from:
+
+```text
+59.6% → 64.0%
+```
+
+### Larger context helped
+
+Increasing the maximum sequence length from:
+
+```text
+768 → 1024
+```
+
+produced the best result:
+
+```text
+64.0% → 66.4%
+```
+
+### Stricter prompting did not automatically improve accuracy
+
+A more restrictive schema-aware prompt reduced execution accuracy:
+
+```text
+66.4% → 63.2%
+```
+
+The generated SQL became more constrained, but semantic correctness did not improve.
+
+### More explicit schema metadata did not help the small model
+
+Adding explicit primary-key and foreign-key structure produced:
+
+```text
+62.8%
+```
+
+This suggests that simply adding more schema information can increase prompt complexity without improving reasoning.
+
+### Larger LoRA rank was not better
+
+Increasing:
+
+```text
+r16 / alpha32
+```
+
+to:
+
+```text
+r32 / alpha64
+```
+
+resulted in:
+
+```text
+64.4%
+```
+
+which remained below the v3 result.
+
+### A larger base model was not automatically better
+
+Qwen2.5-Coder-3B was trained with the same main QLoRA configuration and reached:
+
+```text
+60.4%
+```
+
+compared with:
+
+```text
+66.4%
+```
+
+for the 1.5B v3 experiment.
+
+This project therefore shows why model changes need to be evaluated empirically rather than assuming that a larger model or more complex configuration will necessarily perform better.
+
+---
 
 ## Example
 
@@ -54,7 +182,7 @@ FROM singer
 ORDER BY Age ASC;
 ```
 
-Incorrect: the model sorts from youngest to oldest.
+The ordering direction is incorrect.
 
 ### Fine-tuned model
 
@@ -64,30 +192,24 @@ FROM singer
 ORDER BY age DESC;
 ```
 
-Correct.
-
-The fine-tuned model also reduced schema hallucinations such as generating nonexistent columns, incorrect joins, or unsupported SQL expressions.
+The fine-tuned model correctly interprets "oldest to youngest."
 
 ---
 
-## Project Overview
-
-The goal of this project is to demonstrate an end-to-end parameter-efficient LLM fine-tuning workflow on consumer hardware.
-
-The pipeline covers:
+## Project Pipeline
 
 ```text
 Spider Dataset
       ↓
-Schema + Natural Language Question
+Database Schema + Natural-Language Question
       ↓
 Prompt / Completion Formatting
       ↓
-Qwen2.5-Coder-1.5B-Instruct
+Qwen2.5-Coder
       ↓
 4-bit NF4 Quantization
       ↓
-QLoRA Fine-Tuning
+QLoRA Supervised Fine-Tuning
       ↓
 LoRA Adapter
       ↓
@@ -97,27 +219,12 @@ SQLGlot Validation
       ↓
 SQLite Execution
       ↓
-Base vs Fine-Tuned Evaluation
+Reference Result Comparison
 ```
 
-Rather than evaluating only string similarity, generated SQL is executed against the actual Spider SQLite databases and compared with the result of the reference query.
+The primary evaluation metric is **execution accuracy**.
 
----
-
-## Model
-
-**Base model**
-
-```text
-Qwen/Qwen2.5-Coder-1.5B-Instruct
-```
-
-The model was chosen because it is:
-
-* optimized for code-generation tasks
-* small enough for local experimentation
-* suitable for parameter-efficient fine-tuning
-* capable of running in 4-bit precision on a consumer GPU
+Training loss and token-level accuracy are used only as training diagnostics.
 
 ---
 
@@ -125,48 +232,42 @@ The model was chosen because it is:
 
 The project uses the **Spider Text-to-SQL dataset**.
 
-Each training example contains:
+Each example contains:
 
 ```text
 Database schema
 +
 Natural-language question
 +
-Ground-truth SQL query
+Reference SQL
 ```
 
-Example:
+For the main experiments, the original Spider training split is divided into:
 
 ```text
-Schema:
-school(...)
-school_details(...)
-school_performance(...)
-
-Question:
-What is the average enrollment of schools?
-
-SQL:
-SELECT avg(Enrollment) FROM school
+Training:     6,500 examples
+Validation:     500 examples
 ```
 
-### Current experiment
+The first 250 examples from the Spider validation split are used as a consistent development benchmark:
 
 ```text
-Training:     1,200 examples
-Validation:     150 examples
-Test:           250 held-out examples
+Development benchmark: 250 queries
 ```
 
-The final test examples come from databases not used for model training.
+These same 250 queries were reused across v1–v7 so that experiments could be compared under identical conditions.
+
+Because this benchmark has been used repeatedly for model selection, it should be considered a **development set rather than an untouched final test set**.
+
+The remaining Spider validation examples can be reserved for a future final evaluation.
 
 ---
 
 ## Fine-Tuning Method
 
-The model was trained using **Supervised Fine-Tuning (SFT)** with **QLoRA**.
+The project uses **Supervised Fine-Tuning (SFT)** with **QLoRA**.
 
-Instead of updating all ~1.5 billion parameters, the pretrained model is quantized and frozen while small trainable low-rank adapters are added to its linear layers.
+The pretrained model is quantized to 4-bit precision and kept frozen while small trainable LoRA adapters are added to the model.
 
 ### Quantization
 
@@ -179,7 +280,7 @@ BitsAndBytesConfig(
 )
 ```
 
-### LoRA
+### Baseline LoRA Configuration
 
 ```python
 LoraConfig(
@@ -192,13 +293,13 @@ LoraConfig(
 )
 ```
 
-Only:
+For the 1.5B model, approximately:
 
 ```text
-18,464,768 parameters
+18.5 million parameters
 ```
 
-were trainable, approximately:
+are trainable, representing roughly:
 
 ```text
 1.18% of the model
@@ -206,52 +307,33 @@ were trainable, approximately:
 
 ---
 
-## Training Configuration
+## Best Training Configuration
+
+The current best configuration is v3:
 
 ```text
-Epochs:                   2
-Training examples:        1,200
-Validation examples:      150
-Batch size:               1
-Gradient accumulation:    8
-Learning rate:            2e-4
-Max sequence length:      768
-Precision:                BF16
-Base model precision:     4-bit NF4
-Gradient checkpointing:   Enabled
+Base model:                 Qwen2.5-Coder-1.5B-Instruct
+Training examples:          6,500
+Validation examples:          500
+Epochs:                         2
+Batch size:                     1
+Gradient accumulation:          8
+Learning rate:               2e-4
+Max sequence length:          1024
+LoRA rank:                      16
+LoRA alpha:                     32
+LoRA dropout:                 0.05
+Precision:                    BF16
+Base model quantization:  4-bit NF4
+Gradient checkpointing:    Enabled
+Seed:                           42
 ```
-
-### Training Result
-
-```text
-Training loss:          0.1643
-Validation loss:        0.1706
-Validation token acc:   95.07%
-Training time:          ~24m 55s
-```
-
-Token-level accuracy is reported only as a training diagnostic and is **not** treated as the main Text-to-SQL metric.
-
----
-
-## Hardware
-
-Training was performed locally on:
-
-```text
-GPU: NVIDIA GeForce RTX 5070 Laptop GPU
-VRAM: ~8 GB
-OS: Windows
-Python: 3.11
-```
-
-QLoRA made it possible to fine-tune the model without requiring a high-memory datacenter GPU.
 
 ---
 
 ## Evaluation
 
-Three forms of evaluation are used.
+The project uses three complementary evaluation methods.
 
 ### 1. SQL Parse Validity
 
@@ -261,9 +343,9 @@ This detects malformed SQL before execution.
 
 ### 2. Canonical SQL Comparison
 
-SQLGlot is also used to normalize SQL before structural string comparison.
+SQLGlot is used to normalize generated and reference SQL.
 
-This is more useful than raw exact-string matching but still cannot reliably determine semantic equivalence.
+This metric is useful for diagnostics, but exact structural equivalence is not the primary goal.
 
 For example:
 
@@ -277,126 +359,98 @@ and:
 50000 < salary
 ```
 
-can represent the same operation despite being different strings.
+can represent the same condition despite having different textual structures.
 
 ### 3. Execution Accuracy
 
-The primary metric is **execution accuracy**.
-
-For each example:
+The primary metric is execution accuracy.
 
 ```text
-Reference SQL ──→ SQLite ──→ Reference result
+Reference SQL
+      ↓
+    SQLite
+      ↓
+Reference Result
 
-Base SQL ───────→ SQLite ──→ Result
-                                  ↓
-                              Compare
 
-Fine-tuned SQL → SQLite ──→ Result
-                                  ↓
-                              Compare
+Generated SQL
+      ↓
+    SQLite
+      ↓
+Generated Result
+      ↓
+Compare with Reference Result
 ```
 
-A prediction is counted as correct when executing it produces the same result as the reference query.
+A prediction is counted as correct when the generated query produces the same result as the reference SQL.
 
-The databases are opened in read-only mode during evaluation.
-
----
-
-## Final Benchmark
-
-Evaluation on 250 held-out queries:
-
-```text
-Base model
-Execution accuracy: 46.4%
-Correct queries:     116 / 250
-Execution errors:    101
-
-Fine-tuned model
-Execution accuracy: 59.6%
-Correct queries:     149 / 250
-Execution errors:     59
-```
-
-### Improvement
-
-```text
-Execution Accuracy
-46.4% → 59.6%
-
-+13.2 percentage points
-+28.4% relative improvement
-```
-
-Execution errors decreased from:
-
-```text
-101 → 59
-```
-
-which represents approximately a:
-
-```text
-41.6% reduction
-```
+SQLite databases are opened in read-only mode during evaluation.
 
 ---
 
 ## Error Analysis
 
-Fine-tuning noticeably improved several common failure modes.
-
-### Incorrect ordering
-
-Base:
-
-```sql
-ORDER BY Age ASC
-```
-
-Fine-tuned:
-
-```sql
-ORDER BY age DESC
-```
-
-### Unnecessary or hallucinated joins
-
-Base models frequently generated joins such as:
-
-```sql
-JOIN singer ...
-```
-
-even when the answer could be retrieved directly from the target table.
-
-The fine-tuned model more frequently learned the simpler schema-correct query.
-
-### Nonexistent columns
-
-Examples of baseline execution failures included:
+The best v3 model reaches:
 
 ```text
-no such column: T2.Average
-no such column: T2.Name
+166 / 250 correct
+66.4% execution accuracy
 ```
 
-Fine-tuning reduced the total number of execution errors by more than 40%.
+The remaining 84 incorrect examples consist of:
 
-### Remaining limitations
+```text
+Execution errors:          44
+Executable but incorrect:  40
+```
 
-The fine-tuned model still fails on some complex cases involving:
+Observed failure modes include:
 
-* multi-table joins
-* nested queries
-* `INTERSECT`
-* `EXCEPT`
-* schema linking
-* ambiguous natural-language questions
-* complex aggregation
+- hallucinated tables
+- hallucinated columns
+- incorrect schema linking
+- incorrect joins
+- wrong table selection
+- aggregation mistakes
+- incorrect `GROUP BY` logic
+- nested-query mistakes
+- incorrect set operations such as `INTERSECT` and `EXCEPT`
+- incorrect literal values
+- filter mistakes
+- relational reasoning errors
 
-Fine-tuning can also introduce regressions: some queries solved correctly by the base model are answered incorrectly by the adapted model.
+Examples include generating identifiers such as:
+
+```text
+petage
+pet_type
+MakerID
+```
+
+when the real schema contains differently named columns.
+
+Another important finding is:
+
+```text
+valid SQL != correct SQL
+```
+
+A query can parse successfully and execute without errors while still answering the question incorrectly.
+
+---
+
+## Hardware
+
+Training was performed locally on:
+
+```text
+GPU:     NVIDIA GeForce RTX 5070 Laptop GPU
+VRAM:    ~8 GB
+OS:      Windows
+Python:  3.11
+```
+
+QLoRA allows the experiments to run on consumer hardware without requiring a high-memory datacenter GPU.
 
 ---
 
@@ -406,13 +460,18 @@ Fine-tuning can also introduce regressions: some queries solved correctly by the
 text-to-sql-finetuning/
 │
 ├── data/
-│   └── processed/
 │
 ├── models/
-│   └── text-to-sql-qwen-lora/
 │
 ├── results/
-│   └── model_comparison.jsonl
+│   ├── experiments.csv
+│   ├── v1-1200-context768/
+│   ├── v2-full-context768/
+│   ├── v3-full-context1024/
+│   ├── v4-schema-aware/
+│   ├── v5-structured-schema/
+│   ├── v6-lora-r32/
+│   └── v7-qwen3b/
 │
 ├── src/
 │   ├── prepare_dataset.py
@@ -423,12 +482,13 @@ text-to-sql-finetuning/
 │   └── evaluate_execution.py
 │
 ├── .gitignore
+├── LICENSE
 ├── README.md
 ├── requirements.txt
 └── requirements-lock.txt
 ```
 
-Large model files, downloaded databases, and generated datasets are excluded from Git.
+Large model checkpoints, downloaded databases, virtual environments, and generated datasets are excluded from Git where appropriate.
 
 ---
 
@@ -436,13 +496,11 @@ Large model files, downloaded databases, and generated datasets are excluded fro
 
 Create a virtual environment:
 
-```bash
+```powershell
 python -m venv .venv
 ```
 
-Activate it.
-
-Windows:
+Activate it on Windows:
 
 ```powershell
 .venv\Scripts\Activate.ps1
@@ -450,7 +508,7 @@ Windows:
 
 Install dependencies:
 
-```bash
+```powershell
 pip install -r requirements.txt
 ```
 
@@ -458,367 +516,136 @@ pip install -r requirements.txt
 
 ## Prepare Dataset
 
-```bash
-python src/prepare_dataset.py
+```powershell
+python src\prepare_dataset.py
 ```
 
-This generates the processed train, validation, and test JSONL files.
+The default full-data configuration creates:
+
+```text
+6,500 training examples
+500 validation examples
+250 development examples
+```
 
 ---
 
 ## Train
 
-Run a short smoke test first:
+Run a small smoke test first:
 
-```bash
-python src/train.py --smoke
+```powershell
+python src\train.py --smoke
 ```
 
-Run full training:
+Example command for the best v3 configuration:
 
-```bash
-python src/train.py
-```
-
-The resulting LoRA adapter is saved to:
-
-```text
-models/text-to-sql-qwen-lora/
-```
-
----
-
-## Download Spider Databases
-
-```bash
-python src/download_spider_databases.py
-```
-
-These SQLite databases are required for execution-based evaluation.
-
----
-
-## Benchmark
-
-Generate predictions for the held-out test subset:
-
-```bash
-python src/compare_models.py --limit 250
-```
-
-Then execute the generated and reference queries:
-
-```bash
-python src/evaluate_execution.py
+```powershell
+python src\train.py `
+  --experiment-id v3-full-context1024 `
+  --train-file data\v2-full\train.jsonl `
+  --val-file data\v2-full\validation.jsonl `
+  --output-dir models\v3-full-context1024 `
+  --max-length 1024 `
+  --epochs 2 `
+  --learning-rate 2e-4 `
+  --lora-r 16 `
+  --lora-alpha 32
 ```
 
 ---
 
-# Roadmap
+## Generate Predictions
 
-The current experiment intentionally uses a relatively small training subset and a compact 1.5B model.
-
-Several improvements are planned.
-
-## 1. Train on the Full Spider Training Set
-
-Current:
-
-```text
-1,200 training examples
+```powershell
+python src\compare_models.py `
+  --experiment-id v3-full-context1024 `
+  --adapter-path models\v3-full-context1024 `
+  --test-file data\v2-full\test.jsonl
 ```
 
-Future:
+For a different base model, such as Qwen2.5-Coder-3B:
 
-```text
-Full Spider training split
-```
-
-Increasing dataset coverage should expose the model to more schemas, join patterns, aggregations, nested queries, and SQL operators.
-
----
-
-## 2. Increase Training Context Length
-
-Current:
-
-```text
-max_length = 768
-```
-
-Planned experiments:
-
-```text
-1024
-1536
-```
-
-Large database schemas may currently be truncated, which can remove table or foreign-key information needed for correct SQL generation.
-
----
-
-## 3. Schema-Aware Prompting
-
-Introduce stricter generation instructions:
-
-```text
-Use only tables present in the schema.
-Use only columns present in the schema.
-Do not invent tables or columns.
-Return exactly one SQLite query.
-Do not provide explanations.
-```
-
-The schema representation can also be extended to explicitly identify:
-
-* primary keys
-* foreign keys
-* table relationships
-* column types
-
----
-
-## 4. Hyperparameter Experiments
-
-Current configuration:
-
-```text
-LoRA rank:        16
-LoRA alpha:       32
-Learning rate:    2e-4
-Epochs:           2
-```
-
-Candidate experiment:
-
-```text
-LoRA rank:        32
-LoRA alpha:       64
-Learning rate:    1e-4
-Epochs:           3
-```
-
-Experiments will be compared using execution accuracy rather than training loss alone.
-
----
-
-## 5. Larger Base Model
-
-Evaluate:
-
-```text
-Qwen2.5-Coder-3B-Instruct
-```
-
-using 4-bit QLoRA.
-
-A larger model may improve:
-
-* complex schema reasoning
-* joins
-* nested queries
-* set operations
-* schema linking
-
-while remaining potentially feasible on limited GPU memory.
-
----
-
-## 6. Schema Validation
-
-Add a validation stage between generation and execution:
-
-```text
-Generated SQL
-      ↓
-SQLGlot parser
-      ↓
-Extract referenced tables / columns
-      ↓
-Compare against database schema
-      ↓
-Reject invalid schema references
-```
-
-This directly targets one of the most common failure modes: hallucinated tables and columns.
-
----
-
-## 7. Execution-Guided SQL Repair
-
-Implement an iterative inference pipeline:
-
-```text
-Question + Schema
-      ↓
-Fine-Tuned Model
-      ↓
-Generated SQL
-      ↓
-SQLite Execution
-      ↓
-Execution Error?
-      ↓
-Error + Schema + SQL
-      ↓
-Model Repair
-      ↓
-Execute Again
-```
-
-Example:
-
-```text
-SQLite error:
-no such column: T3.concert_name
-```
-
-The model receives the execution error and available schema and gets one opportunity to repair its SQL.
-
-Future evaluation can therefore compare:
-
-```text
-Base Model
-        ↓
-Fine-Tuned Model
-        ↓
-Fine-Tuned + Execution-Guided Repair
+```powershell
+python src\compare_models.py `
+  --model-name Qwen/Qwen2.5-Coder-3B-Instruct `
+  --experiment-id v7-qwen3b `
+  --adapter-path models\v7-qwen3b `
+  --test-file data\v2-full\test.jsonl
 ```
 
 ---
 
-## Target Architecture
+## Execution Evaluation
 
-```text
-Natural Language Question
-          +
-    Database Schema
-          ↓
- Fine-Tuned Qwen
-          ↓
-    Generated SQL
-          ↓
-   SQLGlot Validation
-          ↓
- Schema Consistency Check
-          ↓
-     SQLite Execution
-          ↓
-       Success?
-       /      \
-     Yes       No
-      ↓         ↓
-   Result    Repair Agent
-                  ↓
-             Corrected SQL
-                  ↓
-               SQLite
+```powershell
+python src\evaluate_execution.py `
+  --experiment-id v3-full-context1024
 ```
 
-This transforms the project from a pure fine-tuning experiment into a more robust **Text-to-SQL inference system**.
+The evaluator executes both reference and generated SQL against the corresponding Spider SQLite database and compares the returned results.
 
 ---
 
 ## Technologies
 
-* Python
-* PyTorch
-* Hugging Face Transformers
-* Hugging Face Datasets
-* PEFT
-* TRL
-* bitsandbytes
-* QLoRA / LoRA
-* SQLGlot
-* SQLite
-* Qwen2.5-Coder
+- Python
+- PyTorch
+- Hugging Face Transformers
+- Hugging Face Datasets
+- TRL
+- PEFT
+- bitsandbytes
+- QLoRA
+- LoRA
+- SQLGlot
+- SQLite
+- Spider
+- Qwen2.5-Coder
+
+---
+
+## Current Status
+
+The experiment series is currently paused after **v7**.
+
+The strongest model remains:
+
+```text
+Qwen2.5-Coder-1.5B-Instruct
++
+QLoRA
++
+6,500 Spider training examples
++
+1024-token context
+```
+
+with:
+
+```text
+66.4% execution accuracy
+166 / 250 correct queries
+```
+
+Further improvements would likely require stronger schema grounding, better handling of relational structure, and evaluation on a separate untouched benchmark rather than continued optimization against the same 250-query development set.
 
 ---
 
 ## Key Takeaway
 
-This project demonstrates that parameter-efficient fine-tuning can significantly improve the task-specific behavior of a small language model using consumer hardware.
+The project demonstrates an end-to-end parameter-efficient LLM fine-tuning workflow on consumer hardware.
 
-With approximately **1.18% of model parameters trainable**, QLoRA increased held-out SQL execution accuracy from:
-
-```text
-46.4% → 59.6%
-```
-
-while reducing SQL execution errors by approximately:
+The best QLoRA experiment improved execution accuracy from:
 
 ```text
-41.6%
+46.4% → 66.4%
 ```
 
-The next stage is focused on full-dataset training, stronger schema grounding, and execution-guided error correction.
+while training only a small fraction of the full model parameters.
 
-## Results
+The experiment history also shows an important practical result:
 
-The project uses a sequence of controlled experiments to measure how individual changes affect Text-to-SQL performance.
+> More parameters, more prompt constraints, more schema metadata, and larger LoRA adapters do not automatically improve downstream task performance.
 
-| Experiment                 | Training Examples | Context | Execution Accuracy |             Correct | Execution Errors |
-| -------------------------- | ----------------: | ------: | -----------------: | ------------------: | ---------------: |
-| Base Qwen2.5-Coder-1.5B    |                — |      — |              46.4% |           116 / 250 |              101 |
-| v1 — QLoRA baseline       |             1,200 |     768 |              59.6% |           149 / 250 |               59 |
-| v2 — Full Spider training |             6,500 |     768 |    **64.0%** | **160 / 250** |     **36** |
-
-### Current best result
-
-Training the same QLoRA configuration on 6,500 Spider examples improved execution accuracy from:
-
-```text
-Base model: 46.4%
-v1 QLoRA:   59.6%
-v2 QLoRA:   64.0%
-```
-
-Compared with the original base model, v2 achieved:
-
-- **+17.6 percentage points** execution accuracy
-- **+37.9% relative improvement**
-- **+44 additional correct queries**
-- execution errors reduced from **101 to 36**
-
-Compared with v1, increasing the training set from 1,200 to 6,500 examples improved execution accuracy by **+4.4 percentage points**.
-
-The final benchmark contains **250 held-out Spider queries** executed against the corresponding SQLite databases.
-
-> Note: this project uses a custom held-out Spider subset and custom execution evaluator. Results are not directly comparable to the official Spider leaderboard.
-
----
-
-## Results
-
-The project uses a sequence of controlled experiments to measure how individual changes affect Text-to-SQL performance.
-
-| Experiment                 | Training Examples | Context | Execution Accuracy |             Correct | Execution Errors |
-| -------------------------- | ----------------: | ------: | -----------------: | ------------------: | ---------------: |
-| Base Qwen2.5-Coder-1.5B    |                — |      — |              46.4% |           116 / 250 |              101 |
-| v1 — QLoRA baseline       |             1,200 |     768 |              59.6% |           149 / 250 |               59 |
-| v2 — Full Spider training |             6,500 |     768 |    **64.0%** | **160 / 250** |     **36** |
-
-### Current best result
-
-Training the same QLoRA configuration on 6,500 Spider examples improved execution accuracy from:
-
-```text
-Base model: 46.4%
-v1 QLoRA:   59.6%
-v2 QLoRA:   64.0%
-```
-
-Compared with the original base model, v2 achieved:
-
-- **+17.6 percentage points** execution accuracy
-- **+37.9% relative improvement**
-- **+44 additional correct queries**
-- execution errors reduced from **101 to 36**
-
-Compared with v1, increasing the training set from 1,200 to 6,500 examples improved execution accuracy by **+4.4 percentage points**.
-
-The final benchmark contains **250 held-out Spider queries** executed against the corresponding SQLite databases.
-
-> Note: this project uses a custom held-out Spider subset and custom execution evaluator. Results are not directly comparable to the official Spider leaderboard.
-
----
+Each change needs to be evaluated against the metric that actually matters for the application — in this case, whether the generated SQL produces the correct database result.
