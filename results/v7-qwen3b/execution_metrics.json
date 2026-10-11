@@ -1,0 +1,14 @@
+{
+  "experiment_id": "v7-qwen3b",
+  "evaluated_examples": 250,
+  "reference_errors": 0,
+  "base_execution_accuracy": 0.228,
+  "finetuned_execution_accuracy": 0.604,
+  "absolute_improvement_percentage_points": 37.599999999999994,
+  "relative_improvement_percent": 164.91228070175436,
+  "base_correct": 57,
+  "finetuned_correct": 151,
+  "base_execution_errors": 180,
+  "finetuned_execution_errors": 49,
+  "execution_error_reduction_percent": 72.77777777777777
+}

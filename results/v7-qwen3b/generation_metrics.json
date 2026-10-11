@@ -1,0 +1,17 @@
+{
+  "experiment_id": "v7-qwen3b",
+  "evaluated_examples": 250,
+  "max_new_tokens": 256,
+  "base": {
+    "valid_sql": 229,
+    "valid_sql_pct": 91.6,
+    "canonical_exact": 1,
+    "canonical_exact_pct": 0.4
+  },
+  "finetuned": {
+    "valid_sql": 249,
+    "valid_sql_pct": 99.6,
+    "canonical_exact": 28,
+    "canonical_exact_pct": 11.2
+  }
+}

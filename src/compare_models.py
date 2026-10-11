@@ -23,6 +23,12 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--model-name",
+        type=str,
+        default=MODEL_NAME,
+    )
+
+    parser.add_argument(
         "--experiment-id",
         required=True,
     )
@@ -218,7 +224,7 @@ def main():
     print("Test file:", args.test_file)
 
     tokenizer = AutoTokenizer.from_pretrained(
-        MODEL_NAME
+        args.model_name
     )
 
     if tokenizer.pad_token is None:
@@ -242,7 +248,7 @@ def main():
     model = (
         AutoModelForCausalLM
         .from_pretrained(
-            MODEL_NAME,
+            args.model_name,
             quantization_config=(
                 quantization_config
             ),

@@ -18,6 +18,12 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--model-name",
+        type=str,
+        default=MODEL_NAME,
+    )
+
+    parser.add_argument(
         "--experiment-id",
         type=str,
         default="v2-full-context768",
@@ -193,7 +199,7 @@ def main():
     print("\nLoading tokenizer...")
 
     tokenizer = AutoTokenizer.from_pretrained(
-        MODEL_NAME
+        args.model_name
     )
 
     if tokenizer.pad_token is None:
@@ -290,7 +296,7 @@ def main():
     print("\nCreating SFTTrainer...")
 
     trainer = SFTTrainer(
-        model=MODEL_NAME,
+        model=args.model_name,
         args=training_config,
 
         train_dataset=train_dataset,
@@ -327,7 +333,7 @@ def main():
     if not args.smoke:
         experiment_config = {
             "experiment_id": args.experiment_id,
-            "model": MODEL_NAME,
+            "model": args.model_name,
             "method": "4-bit QLoRA SFT",
             "dataset": "Spider",
 
